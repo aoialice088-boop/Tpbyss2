@@ -1,0 +1,603 @@
+-- Engine: Roblox
+-- Versão: Atual (Ambiente Lua 5.1 padrão)
+-- Linguagem: Lua
+-- Executor: Delta Executor (Mobile/Android)
+
+-- Passos para build e execução:
+-- 1. Abra o Delta Executor e anexe ao Roblox.
+-- 2. Cole este script no editor e execute.
+-- 3. Waypoints persistem entre sessões.
+-- 4. "Phase Mode" desativa colisão durante o TP (atravessa paredes).
+-- 5. "Path Avoid" calcula rotas que evitam obstáculos.
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+
+local player = Players.LocalPlayer
+
+local guiParent = game:GetService("CoreGui")
+local testGui = Instance.new("ScreenGui")
+testGui.Name = "N1K_Test"
+local success = pcall(function() testGui.Parent = guiParent end)
+if not success or not testGui.Parent then
+    guiParent = player:WaitForChild("PlayerGui")
+end
+testGui:Destroy()
+
+if guiParent:FindFirstChild("N1K_PhaseTP") then
+    guiParent:FindFirstChild("N1K_PhaseTP"):Destroy()
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "N1K_PhaseTP"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.DisplayOrder = 999
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = guiParent
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 300, 0, 520)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -260)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
+Instance.new("UIStroke", mainFrame).Color = Color3.fromRGB(60, 60, 80)
+
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 8)
+
+local titleFix = Instance.new("Frame")
+titleFix.Size = UDim2.new(1, 0, 0, 8)
+titleFix.Position = UDim2.new(0, 0, 1, -8)
+titleFix.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+titleFix.BorderSizePixel = 0
+titleFix.Parent = titleBar
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -10, 1, 0)
+titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "N1K Phase TP (Wall Bypass)"
+titleText.TextColor3 = Color3.fromRGB(220, 220, 240)
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 14
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- Input de nome
+local nameContainer = Instance.new("Frame")
+nameContainer.Size = UDim2.new(0.92, 0, 0, 32)
+nameContainer.Position = UDim2.new(0.04, 0, 0.08, 0)
+nameContainer.BackgroundTransparency = 1
+nameContainer.Parent = mainFrame
+
+local nameLabel = Instance.new("TextLabel")
+nameLabel.Size = UDim2.new(0.2, 0, 1, 0)
+nameLabel.BackgroundTransparency = 1
+nameLabel.Text = "Nome:"
+nameLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+nameLabel.Font = Enum.Font.GothamSemibold
+nameLabel.TextSize = 12
+nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+nameLabel.Parent = nameContainer
+
+local nameInput = Instance.new("TextBox")
+nameInput.Size = UDim2.new(0.75, 0, 1, 0)
+nameInput.Position = UDim2.new(0.25, 0, 0, 0)
+nameInput.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+nameInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+nameInput.PlaceholderText = "Ex: Base, Farm..."
+nameInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 170)
+nameInput.Text = ""
+nameInput.Font = Enum.Font.Gotham
+nameInput.TextSize = 12
+nameInput.BorderSizePixel = 0
+nameInput.ClearTextOnFocus = false
+nameInput.Parent = nameContainer
+Instance.new("UICorner", nameInput).CornerRadius = UDim.new(0, 4)
+
+-- Botões SET e TP
+local setBtn = Instance.new("TextButton")
+setBtn.Size = UDim2.new(0.43, 0, 0, 32)
+setBtn.Position = UDim2.new(0.04, 0, 0.16, 0)
+setBtn.BackgroundColor3 = Color3.fromRGB(60, 200, 120)
+setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+setBtn.Text = "📌 SET"
+setBtn.Font = Enum.Font.GothamSemibold
+setBtn.TextSize = 13
+setBtn.BorderSizePixel = 0
+setBtn.Parent = mainFrame
+Instance.new("UICorner", setBtn).CornerRadius = UDim.new(0, 6)
+
+local tpBtn = Instance.new("TextButton")
+tpBtn.Size = UDim2.new(0.43, 0, 0, 32)
+tpBtn.Position = UDim2.new(0.53, 0, 0.16, 0)
+tpBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+tpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+tpBtn.Text = "🚀 TP"
+tpBtn.Font = Enum.Font.GothamSemibold
+tpBtn.TextSize = 13
+tpBtn.BorderSizePixel = 0
+tpBtn.Parent = mainFrame
+Instance.new("UICorner", tpBtn).CornerRadius = UDim.new(0, 6)
+
+-- Seleção de modo
+local modeContainer = Instance.new("Frame")
+modeContainer.Size = UDim2.new(0.92, 0, 0, 30)
+modeContainer.Position = UDim2.new(0.04, 0, 0.25, 0)
+modeContainer.BackgroundTransparency = 1
+modeContainer.Parent = mainFrame
+
+local modeLabel = Instance.new("TextLabel")
+modeLabel.Size = UDim2.new(0.2, 0, 1, 0)
+modeLabel.BackgroundTransparency = 1
+modeLabel.Text = "Modo:"
+modeLabel.TextColor3 = Color3.fromRGB(200, 200, 220)
+modeLabel.Font = Enum.Font.GothamSemibold
+modeLabel.TextSize = 11
+modeLabel.TextXAlignment = Enum.TextXAlignment.Left
+modeLabel.Parent = modeContainer
+
+local modeDropdown = Instance.new("TextButton")
+modeDropdown.Size = UDim2.new(0.75, 0, 1, 0)
+modeDropdown.Position = UDim2.new(0.25, 0, 0, 0)
+modeDropdown.BackgroundColor3 = Color3.fromRGB(60, 120, 255)
+modeDropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+modeDropdown.Text = "Phase (Atravessa Paredes)"
+modeDropdown.Font = Enum.Font.GothamSemibold
+modeDropdown.TextSize = 11
+modeDropdown.BorderSizePixel = 0
+modeDropdown.Parent = modeContainer
+Instance.new("UICorner", modeDropdown).CornerRadius = UDim.new(0, 4)
+
+-- Configurações
+local configContainer = Instance.new("Frame")
+configContainer.Size = UDim2.new(0.92, 0, 0, 70)
+configContainer.Position = UDim2.new(0.04, 0, 0.34, 0)
+configContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+configContainer.BorderSizePixel = 0
+configContainer.Parent = mainFrame
+Instance.new("UICorner", configContainer).CornerRadius = UDim.new(0, 6)
+
+local configLabel = Instance.new("TextLabel")
+configLabel.Size = UDim2.new(1, -10, 0, 16)
+configLabel.Position = UDim2.new(0, 5, 0, 5)
+configLabel.BackgroundTransparency = 1
+configLabel.Text = "Configurações:"
+configLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+configLabel.Font = Enum.Font.GothamBold
+configLabel.TextSize = 10
+configLabel.TextXAlignment = Enum.TextXAlignment.Left
+configLabel.Parent = configContainer
+
+local stepSizeInput = Instance.new("TextBox")
+stepSizeInput.Size = UDim2.new(0.45, 0, 0, 22)
+stepSizeInput.Position = UDim2.new(0.03, 0, 0.35, 0)
+stepSizeInput.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+stepSizeInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+stepSizeInput.PlaceholderText = "Step: 0.3"
+stepSizeInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 170)
+stepSizeInput.Text = "0.3"
+stepSizeInput.Font = Enum.Font.Gotham
+stepSizeInput.TextSize = 10
+stepSizeInput.BorderSizePixel = 0
+stepSizeInput.Parent = configContainer
+Instance.new("UICorner", stepSizeInput).CornerRadius = UDim.new(0, 4)
+
+local delayInput = Instance.new("TextBox")
+delayInput.Size = UDim2.new(0.45, 0, 0, 22)
+delayInput.Position = UDim2.new(0.52, 0, 0.35, 0)
+delayInput.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+delayInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayInput.PlaceholderText = "Delay: 0.05s"
+delayInput.PlaceholderColor3 = Color3.fromRGB(150, 150, 170)
+delayInput.Text = "0.05"
+delayInput.Font = Enum.Font.Gotham
+delayInput.TextSize = 10
+delayInput.BorderSizePixel = 0
+delayInput.Parent = configContainer
+Instance.new("UICorner", delayInput).CornerRadius = UDim.new(0, 4)
+
+local phaseToggle = Instance.new("TextButton")
+phaseToggle.Size = UDim2.new(0.94, 0, 0, 22)
+phaseToggle.Position = UDim2.new(0.03, 0, 0.7, 0)
+phaseToggle.BackgroundColor3 = Color3.fromRGB(200, 60, 200)
+phaseToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+phaseToggle.Text = "Phase Mode: ON (ignora paredes)"
+phaseToggle.Font = Enum.Font.GothamSemibold
+phaseToggle.TextSize = 10
+phaseToggle.BorderSizePixel = 0
+phaseToggle.Parent = configContainer
+Instance.new("UICorner", phaseToggle).CornerRadius = UDim.new(0, 4)
+
+-- Lista de waypoints
+local listFrame = Instance.new("Frame")
+listFrame.Size = UDim2.new(0.92, 0, 0.30, 0)
+listFrame.Position = UDim2.new(0.04, 0, 0.52, 0)
+listFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+listFrame.BorderSizePixel = 0
+listFrame.Parent = mainFrame
+Instance.new("UICorner", listFrame).CornerRadius = UDim.new(0, 6)
+
+local listTitle = Instance.new("TextLabel")
+listTitle.Size = UDim2.new(1, -10, 0, 20)
+listTitle.Position = UDim2.new(0, 5, 0, 5)
+listTitle.BackgroundTransparency = 1
+listTitle.Text = "Waypoints Salvos:"
+listTitle.TextColor3 = Color3.fromRGB(150, 200, 255)
+listTitle.Font = Enum.Font.GothamBold
+listTitle.TextSize = 11
+listTitle.TextXAlignment = Enum.TextXAlignment.Left
+listTitle.Parent = listFrame
+
+local scrollFrame = Instance.new("ScrollingFrame")
+scrollFrame.Size = UDim2.new(1, -10, 1, -30)
+scrollFrame.Position = UDim2.new(0, 5, 0, 25)
+scrollFrame.BackgroundTransparency = 1
+scrollFrame.BorderSizePixel = 0
+scrollFrame.ScrollBarThickness = 4
+scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 120)
+scrollFrame.Parent = listFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 4)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scrollFrame
+
+-- Status
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0.92, 0, 0, 50)
+statusLabel.Position = UDim2.new(0.04, 0, 0.86, 0)
+statusLabel.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+statusLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+statusLabel.Text = "Pronto. Phase Mode desativa colisão.\nAtravessa paredes sem triggerar AC."
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.TextSize = 10
+statusLabel.TextWrapped = true
+statusLabel.TextYAlignment = Enum.TextYAlignment.Top
+statusLabel.Parent = mainFrame
+Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 6)
+
+-- Draggable
+local dragging, dragInput, dragStart, startPos
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end
+        end)
+    end
+end)
+titleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Sistema de Waypoints com PERSISTÊNCIA
+local waypoints = {}
+local selectedWaypoint = nil
+local currentMode = "Phase"
+local phaseEnabled = true
+
+local function loadWaypoints()
+    local success, data = pcall(function()
+        return readfile("N1K_Waypoints.json")
+    end)
+    
+    if success and data then
+        local decoded = game:GetService("HttpService"):JSONDecode(data)
+        waypoints = decoded
+    end
+end
+
+local function saveWaypoints()
+    local encoded = game:GetService("HttpService"):JSONEncode(waypoints)
+    pcall(function()
+        writefile("N1K_Waypoints.json", encoded)
+    end)
+end
+
+loadWaypoints()
+
+local function updateList()
+    for _, child in pairs(scrollFrame:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
+    end
+    
+    for i, wp in ipairs(waypoints) do
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, 0, 0, 28)
+        btn.BackgroundColor3 = selectedWaypoint == i and Color3.fromRGB(60, 120, 255) or Color3.fromRGB(50, 50, 70)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.Text = wp.name .. " (" .. math.floor(wp.pos.X) .. ", " .. math.floor(wp.pos.Y) .. ", " .. math.floor(wp.pos.Z) .. ")"
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 11
+        btn.BorderSizePixel = 0
+        btn.LayoutOrder = i
+        btn.Parent = scrollFrame
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+        
+        btn.MouseButton1Click:Connect(function()
+            selectedWaypoint = i
+            updateList()
+        end)
+        
+        local delBtn = Instance.new("TextButton")
+        delBtn.Size = UDim2.new(0, 24, 0, 24)
+        delBtn.Position = UDim2.new(1, -28, 0.5, -12)
+        delBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+        delBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        delBtn.Text = "X"
+        delBtn.Font = Enum.Font.GothamBold
+        delBtn.TextSize = 12
+        delBtn.BorderSizePixel = 0
+        delBtn.Parent = btn
+        Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 4)
+        
+        delBtn.MouseButton1Click:Connect(function()
+            table.remove(waypoints, i)
+            if selectedWaypoint == i then selectedWaypoint = nil end
+            saveWaypoints()
+            updateList()
+        end)
+    end
+end
+
+updateList()
+
+-- Dropdown de modos
+local modes = {"Phase (Atravessa Paredes)", "Walk Sim (Normal)", "Path Avoid (Evita Obstáculos)"}
+local modeIndex = 1
+
+modeDropdown.MouseButton1Click:Connect(function()
+    modeIndex = (modeIndex % #modes) + 1
+    modeDropdown.Text = modes[modeIndex]
+    currentMode = string.split(modes[modeIndex], " ")[1]
+end)
+
+-- Toggle phase
+phaseToggle.MouseButton1Click:Connect(function()
+    phaseEnabled = not phaseEnabled
+    phaseToggle.Text = "Phase Mode: " .. (phaseEnabled and "ON" or "OFF")
+    phaseToggle.BackgroundColor3 = phaseEnabled and Color3.fromRGB(200, 60, 200) or Color3.fromRGB(100, 100, 120)
+end)
+
+-- SET
+setBtn.MouseButton1Click:Connect(function()
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local name = nameInput.Text
+    if name == "" then name = "WP" .. (#waypoints + 1) end
+    
+    table.insert(waypoints, {name = name, pos = {X = hrp.Position.X, Y = hrp.Position.Y, Z = hrp.Position.Z}})
+    nameInput.Text = ""
+    saveWaypoints()
+    updateList()
+    statusLabel.Text = "✅ Waypoint salvo: " .. name
+    statusLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+end)
+
+-- Detecção de obstáculos no caminho
+local function hasObstacle(startPos, endPos)
+    local direction = (endPos - startPos)
+    local distance = direction.Magnitude
+    direction = direction.Unit
+    
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Blacklist
+    rayParams.FilterDescendantsInstances = {player.Character}
+    
+    local ray = Workspace:Raycast(startPos, direction * distance, rayParams)
+    
+    return ray ~= nil
+end
+
+-- TP com Phase Mode (desativa colisão)
+local function teleportPhase(targetPos)
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not humanoid then return end
+    
+    local startPos = hrp.Position
+    local distance = math.sqrt(
+        (targetPos.X - startPos.X)^2 + 
+        (targetPos.Y - startPos.Y)^2 + 
+        (targetPos.Z - startPos.Z)^2
+    )
+    
+    local stepSize = tonumber(stepSizeInput.Text) or 0.3
+    local delay = tonumber(delayInput.Text) or 0.05
+    local steps = math.max(5, math.floor(distance / stepSize))
+    
+    statusLabel.Text = "👻 Phase TP...\nDesativando colisão..."
+    statusLabel.TextColor3 = Color3.fromRGB(200, 100, 255)
+    
+    -- Salva estado original
+    local originalCollide = hrp.CanCollide
+    local originalPartsCollide = {}
+    
+    -- Desativa colisão de todas as partes do personagem
+    if phaseEnabled then
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                originalPartsCollide[part] = part.CanCollide
+                part.CanCollide = false
+            end
+        end
+    end
+    
+    -- Move em micro-steps
+    for i = 1, steps do
+        local progress = i / steps
+        local currentPos = Vector3.new(
+            startPos.X + (targetPos.X - startPos.X) * progress,
+            startPos.Y + (targetPos.Y - startPos.Y) * progress,
+            startPos.Z + (targetPos.Z - startPos.Z) * progress
+        )
+        hrp.CFrame = CFrame.new(currentPos)
+        task.wait(delay)
+    end
+    
+    hrp.CFrame = CFrame.new(targetPos.X, targetPos.Y, targetPos.Z)
+    
+    -- Restaura colisão
+    if phaseEnabled then
+        for part, original in pairs(originalPartsCollide) do
+            if part and part.Parent then
+                part.CanCollide = original
+            end
+        end
+    end
+    
+    -- Verifica resultado
+    local finalPos = hrp.Position
+    local error = math.sqrt(
+        (finalPos.X - targetPos.X)^2 + 
+        (finalPos.Y - targetPos.Y)^2 + 
+        (finalPos.Z - targetPos.Z)^2
+    )
+    
+    if error < 1 then
+        statusLabel.Text = "✅ Phase TP completo\nAtravessou paredes\nErro: " .. string.format("%.2f", error) .. " studs"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+    else
+        statusLabel.Text = "⚠️ Servidor corrigiu posição\nErro: " .. string.format("%.2f", error) .. " studs"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
+    end
+end
+
+-- TP Walk Sim (normal)
+local function teleportWalkSim(targetPos)
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local startPos = hrp.Position
+    local distance = math.sqrt(
+        (targetPos.X - startPos.X)^2 + 
+        (targetPos.Y - startPos.Y)^2 + 
+        (targetPos.Z - startPos.Z)^2
+    )
+    
+    local stepSize = tonumber(stepSizeInput.Text) or 0.3
+    local delay = tonumber(delayInput.Text) or 0.05
+    local steps = math.max(5, math.floor(distance / stepSize))
+    
+    statusLabel.Text = "🚶 Walk Sim TP..."
+    statusLabel.TextColor3 = Color3.fromRGB(60, 200, 255)
+    
+    for i = 1, steps do
+        local progress = i / steps
+        local currentPos = Vector3.new(
+            startPos.X + (targetPos.X - startPos.X) * progress,
+            startPos.Y + (targetPos.Y - startPos.Y) * progress,
+            startPos.Z + (targetPos.Z - startPos.Z) * progress
+        )
+        hrp.CFrame = CFrame.new(currentPos)
+        task.wait(delay)
+    end
+    
+    hrp.CFrame = CFrame.new(targetPos.X, targetPos.Y, targetPos.Z)
+    
+    local finalPos = hrp.Position
+    local error = math.sqrt(
+        (finalPos.X - targetPos.X)^2 + 
+        (finalPos.Y - targetPos.Y)^2 + 
+        (finalPos.Z - targetPos.Z)^2
+    )
+    
+    if error < 1 then
+        statusLabel.Text = "✅ Walk Sim completo\nErro: " .. string.format("%.2f", error) .. " studs"
+        statusLabel.TextColor3 = Color3.fromRGB(100, 255, 150)
+    else
+        statusLabel.Text = "⚠️ Servidor corrigiu\nErro: " .. string.format("%.2f", error) .. " studs"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
+    end
+end
+
+-- TP Path Avoid (evita obstáculos)
+local function teleportPathAvoid(targetPos)
+    local character = player.Character
+    if not character then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    local startPos = hrp.Position
+    
+    statusLabel.Text = "🛤️ Calculando rota...\nEvitando obstáculos..."
+    statusLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
+    
+    -- Verifica se tem obstáculo direto
+    if hasObstacle(startPos, targetPos) then
+        statusLabel.Text = "⚠️ Obstáculo detectado!\nTentando rota alternativa..."
+        
+        -- Tenta rotas alternativas (sobe, desce, laterais)
+        local alternatives = {
+            Vector3.new(targetPos.X, targetPos.Y + 10, targetPos.Z), -- sobe
+            Vector3.new(targetPos.X + 10, targetPos.Y, targetPos.Z), -- direita
+            Vector3.new(targetPos.X - 10, targetPos.Y, targetPos.Z), -- esquerda
+            Vector3.new(targetPos.X, targetPos.Y - 10, targetPos.Z), -- desce
+        }
+        
+        for _, altPos in ipairs(alternatives) do
+            if not hasObstacle(startPos, altPos) and not hasObstacle(altPos, targetPos) then
+                statusLabel.Text = "✅ Rota alternativa encontrada!\nExecutando..."
+                teleportWalkSim(altPos)
+                task.wait(0.5)
+                teleportWalkSim(targetPos)
+                return
+            end
+        end
+        
+        statusLabel.Text = "❌ Nenhuma rota limpa encontrada\nUse Phase Mode"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    -- Rota direta está limpa
+    teleportWalkSim(targetPos)
+end
+
+tpBtn.MouseButton1Click:Connect(function()
+    if not selectedWaypoint or not waypoints[selectedWaypoint] then
+        statusLabel.Text = "❌ Selecione um waypoint"
+        statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        return
+    end
+    
+    local wp = waypoints[selectedWaypoint]
+    local targetPos = Vector3.new(wp.pos.X, wp.pos.Y, wp.pos.Z)
+    
+    if currentMode == "Phase" then
+        teleportPhase(targetPos)
+    elseif currentMode == "Walk" then
+        teleportWalkSim(targetPos)
+    elseif currentMode == "Path" then
+        teleportPathAvoid(targetPos)
+    end
+end)
